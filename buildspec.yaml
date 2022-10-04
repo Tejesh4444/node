@@ -1,22 +1,27 @@
-version: 0.2
-phases:
-  install:
-    runtime-versions:
-      nodejs: 10
-    commands:
-      - echo Installing
-  pre_build:
-    commands:
-      - echo Installing source NPM dependencies.
-      - npm install
-  build:
-    commands:
-      - echo Build started on `date`
-      - echo Compiling the Node.js code
-      - npm run build
+version: 0.2 
+ 
+phases: 
+  install: 
+    runtime-versions: 
+      docker: 18 
+  pre_build: 
+    commands: 
+      - echo Logging in to Amazon ECR... 
+      - aws --version 
+      - $(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email) 
+      - REPOSITORY_URI=$EcrRepo
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build: 
+    commands: 
+      - echo Build started on `date` 
+      - echo Building the Docker image... 
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
   post_build:
     commands:
       - echo Build completed on `date`
-artifacts:
-  files:
-    - '**/*'
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - aws lambda update-function-code --function-name [YOUR_FUNCTION_NAME] --image-uri $REPOSITORY_URI:$IMAGE_TAG
